@@ -3,20 +3,29 @@ import './App.css';
 
 const API_URL = 'https://7nbqiasg8i.execute-api.us-east-1.amazonaws.com/prod';
 
-interface Poll {
-  pollId: string;
-  question: string;
-  options: string[];
-  createdAt: number;
-  expiresAt?: number;
-  totalVotes: number;
-  votes?: { [option: string]: number };
+interface PollOption {
+  id: string;
+  text: string;
+  votes: number;
 }
 
-interface VoteData {
+interface Poll {
   pollId: string;
-  votes: { [option: string]: number };
+  title: string;
+  options: PollOption[];
+  createdAt: number;
+  expiresAt?: number | null;
   totalVotes: number;
+  shortLink?: string;
+}
+
+interface CreatePollResponse {
+  pollId: string;
+  shareUrl: string;
+  embedCode: string;
+  shortLink: string;
+  createdAt: string;
+  poll: Poll;
 }
 
 function App() {
@@ -49,7 +58,8 @@ function App() {
       const response = await fetch(`${API_URL}/polls/${id}`);
       if (response.ok) {
         const data = await response.json();
-        setCurrentPoll(data);
+        // API returns nested poll object
+        setCurrentPoll(data.poll || data);
         setView('poll');
       } else {
         setError('Poll not found');
@@ -87,10 +97,10 @@ function App() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        const link = `${window.location.origin}?id=${data.pollId}`;
+        const data: CreatePollResponse = await response.json();
+        const link = data.shareUrl || `${window.location.origin}?id=${data.pollId}`;
         setShareLink(link);
-        setCurrentPoll(data);
+        setCurrentPoll(data.poll);
         setView('results');
       } else {
         setError('Failed to create poll');
@@ -115,16 +125,15 @@ function App() {
       const response = await fetch(`${API_URL}/polls/${currentPoll?.pollId}/vote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ option: selectedOption })
+        body: JSON.stringify({ optionId: selectedOption })
       });
 
       if (response.ok) {
-        const data: VoteData = await response.json();
-        setCurrentPoll(prev => prev ? {
-          ...prev,
-          votes: data.votes,
-          totalVotes: data.totalVotes
-        } : null);
+        await response.json();
+        // Reload the poll to get updated vote counts
+        if (currentPoll?.pollId) {
+          await loadPoll(currentPoll.pollId);
+        }
         setHasVoted(true);
         setView('results');
       } else {
@@ -164,6 +173,17 @@ function App() {
   const getPercentage = (votes: number, total: number) => {
     if (total === 0) return 0;
     return Math.round((votes / total) * 100);
+  };
+
+  // Helper to get option text from ID for backward compatibility
+  const getOptionText = (option: PollOption | string): string => {
+    if (typeof option === 'string') return option;
+    return option.text;
+  };
+
+  const getOptionId = (option: PollOption | string): string => {
+    if (typeof option === 'string') return option;
+    return option.id;
   };
 
   // Home View
@@ -283,19 +303,19 @@ function App() {
         <div className="container">
           <button className="btn-back" onClick={() => setView('home')}>← Back</button>
 
-          <h1>{currentPoll.question}</h1>
+          <h1>{currentPoll.title}</h1>
 
           <div className="options-list">
-            {currentPoll.options.map((option, index) => (
+            {currentPoll.options?.map((option, index) => (
               <label key={index} className="option-card">
                 <input
                   type="radio"
                   name="poll-option"
-                  value={option}
-                  checked={selectedOption === option}
+                  value={getOptionId(option)}
+                  checked={selectedOption === getOptionId(option)}
                   onChange={(e) => setSelectedOption(e.target.value)}
                 />
-                <span>{option}</span>
+                <span>{getOptionText(option)}</span>
               </label>
             ))}
           </div>
@@ -316,14 +336,12 @@ function App() {
 
   // Results View
   if (view === 'results' && currentPoll) {
-    const votes = currentPoll.votes || {};
-
     return (
       <div className="App">
         <div className="container">
           <button className="btn-back" onClick={() => setView('home')}>← Back</button>
 
-          <h1>{currentPoll.question}</h1>
+          <h1>{currentPoll.title}</h1>
           <p className="total-votes">{currentPoll.totalVotes} total votes</p>
 
           {shareLink && (
@@ -339,14 +357,14 @@ function App() {
           )}
 
           <div className="results-list">
-            {currentPoll.options.map((option, index) => {
-              const voteCount = votes[option] || 0;
+            {currentPoll.options?.map((option, index) => {
+              const voteCount = typeof option === 'string' ? 0 : option.votes;
               const percentage = getPercentage(voteCount, currentPoll.totalVotes);
 
               return (
                 <div key={index} className="result-item">
                   <div className="result-header">
-                    <span className="result-option">{option}</span>
+                    <span className="result-option">{getOptionText(option)}</span>
                     <span className="result-stats">
                       {voteCount} votes ({percentage}%)
                     </span>
