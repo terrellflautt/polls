@@ -480,19 +480,32 @@ function PollResults() {
 
 // Footer Component
 function Footer() {
+  const products = [
+    { name: 'SnapIT Software', url: 'https://snapitsoftware.com' },
+    { name: 'SnapIT Analytics', url: 'https://snapitanalytics.com' },
+    { name: 'PDF Tools', url: 'https://pdf.snapitsoftware.com' },
+    { name: 'Chimera', url: 'https://chimera.snapitsoftware.com' },
+    { name: 'Burn', url: 'https://burn.snapitsoftware.com' },
+    { name: 'API', url: 'https://api.snapitsoftware.com' },
+    { name: 'SnapIT Agent', url: 'https://snapitagent.com' },
+    { name: 'SnapIT QR', url: 'https://snapitqr.com' },
+    { name: 'SnapIT URL', url: 'https://snapiturl.com' },
+    { name: 'Status Code Check', url: 'https://statuscodecheck.com' },
+    { name: 'SnapIT Soft', url: 'https://snapitsoft.com' },
+    { name: 'Polls', url: 'https://polls.snapitsoftware.com' },
+    { name: 'Forum', url: 'https://forum.snapitsoftware.com' },
+    { name: 'Forum Builder', url: 'https://forums.snapitsoftware.com' }
+  ];
+
   return (
     <footer className="footer">
       <div className="footer-content">
         <div className="footer-links">
-          <a href="https://urlstatuschecker.com" target="_blank" rel="noopener noreferrer">
-            URL Status Checker
-          </a>
-          <a href="https://snapitsaas.com" target="_blank" rel="noopener noreferrer">
-            SnapIT SaaS
-          </a>
-          <a href="https://burn.snapitsoftware.com" target="_blank" rel="noopener noreferrer">
-            Burn
-          </a>
+          {products.map((product, index) => (
+            <a key={index} href={product.url} target="_blank" rel="noopener noreferrer">
+              {product.name}
+            </a>
+          ))}
         </div>
         <span className="footer-text">© 2025 SnapIT Software. All rights reserved.</span>
       </div>
