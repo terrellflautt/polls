@@ -113,9 +113,9 @@ function CreatePoll() {
 
       if (response.ok) {
         const data: CreatePollResponse = await response.json();
-        // Navigate to results page with the short link
-        navigate(`/p/${data.shortLink}/results`, {
-          state: { shareUrl: data.shareUrl }
+        // Navigate to results page with the full poll ID (API doesn't accept short links)
+        navigate(`/p/${data.pollId}/results`, {
+          state: { shareUrl: data.shareUrl, pollData: data.poll }
         });
       } else {
         setError('Failed to create poll');
@@ -366,8 +366,6 @@ function PollResults() {
   useEffect(() => {
     if (pollId) {
       loadPoll(pollId);
-      // Set the share link based on current URL
-      setShareLink(`${window.location.origin}/p/${pollId}`);
     }
   }, [pollId]);
 
@@ -480,15 +478,40 @@ function PollResults() {
   );
 }
 
+// Footer Component
+function Footer() {
+  return (
+    <footer className="footer">
+      <div className="footer-content">
+        <div className="footer-links">
+          <a href="https://urlstatuschecker.com" target="_blank" rel="noopener noreferrer">
+            URL Status Checker
+          </a>
+          <a href="https://snapitsaas.com" target="_blank" rel="noopener noreferrer">
+            SnapIT SaaS
+          </a>
+          <a href="https://burn.snapitsoftware.com" target="_blank" rel="noopener noreferrer">
+            Burn
+          </a>
+        </div>
+        <span className="footer-text">© 2025 SnapIT Software. All rights reserved.</span>
+      </div>
+    </footer>
+  );
+}
+
 // Main App Component with Routes
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/create" element={<CreatePoll />} />
-      <Route path="/p/:pollId" element={<PollVote />} />
-      <Route path="/p/:pollId/results" element={<PollResults />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/create" element={<CreatePoll />} />
+        <Route path="/p/:pollId" element={<PollVote />} />
+        <Route path="/p/:pollId/results" element={<PollResults />} />
+      </Routes>
+      <Footer />
+    </>
   );
 }
 

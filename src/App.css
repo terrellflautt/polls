@@ -337,9 +337,55 @@ h1 {
   text-align: center;
 }
 
+.footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 20px;
+  text-align: center;
+  font-size: 14px;
+  z-index: 1000;
+}
+
+.footer-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.footer-links {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.footer-links a {
+  color: #FF1493;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.footer-links a:hover {
+  color: #FFFDD0;
+  text-decoration: underline;
+}
+
+.footer-text {
+  color: #ccc;
+}
+
 @media (max-width: 640px) {
   .container {
     padding: 24px;
+    margin-bottom: 100px;
   }
 
   h1 {
@@ -353,5 +399,19 @@ h1 {
   .btn {
     font-size: 14px;
     padding: 12px 20px;
+  }
+
+  .footer {
+    padding: 15px 10px;
+    font-size: 12px;
+  }
+
+  .footer-content {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .footer-links {
+    gap: 15px;
   }
 }
