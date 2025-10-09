@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import './App.css';
+import { Footer } from './components/Footer';
 
-const API_URL = 'https://7nbqiasg8i.execute-api.us-east-1.amazonaws.com/prod';
+const API_URL = 'https://polls-api.snapitsoftware.com';
 
 interface PollOption {
   id: string;
@@ -18,6 +19,7 @@ interface Poll {
   expiresAt?: number | null;
   totalVotes: number;
   shortLink?: string;
+  visibility?: 'public' | 'private'; // Optional for backward compatibility
 }
 
 interface CreatePollResponse {
@@ -35,6 +37,24 @@ function Home() {
   const [pollId, setPollId] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [topPolls, setTopPolls] = useState<Poll[]>([]);
+
+  useEffect(() => {
+    loadTopPolls();
+  }, []);
+
+  const loadTopPolls = async () => {
+    try {
+      const response = await fetch(`${API_URL}/polls?visibility=public&limit=6`);
+      if (response.ok) {
+        const data = await response.json();
+        const sortedPolls = (data.polls || []).sort((a: Poll, b: Poll) => b.totalVotes - a.totalVotes);
+        setTopPolls(sortedPolls.slice(0, 6));
+      }
+    } catch (err) {
+      console.error('Failed to load top polls:', err);
+    }
+  };
 
   const loadPoll = async (id: string) => {
     if (!id.trim()) {
@@ -58,6 +78,10 @@ function Home() {
             Create New Poll
           </button>
 
+          <button className="btn btn-secondary" onClick={() => navigate('/discover')}>
+            Discover Public Polls
+          </button>
+
           <div className="poll-lookup">
             <input
               type="text"
@@ -73,6 +97,31 @@ function Home() {
         </div>
 
         {error && <div className="error">{error}</div>}
+
+        {topPolls.length > 0 && (
+          <div className="top-polls-section">
+            <h2>Top Active Polls</h2>
+            <div className="polls-list">
+              {topPolls.map((poll, index) => (
+                <div
+                  key={poll.pollId}
+                  className="poll-card"
+                  onClick={() => navigate(`/p/${poll.pollId}`)}
+                >
+                  <div className="poll-rank">#{index + 1}</div>
+                  <div className="poll-info">
+                    <h3>{poll.title}</h3>
+                    <div className="poll-stats">
+                      <span>{poll.totalVotes} votes</span>
+                      <span>•</span>
+                      <span>{poll.options.length} options</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -84,6 +133,7 @@ function CreatePoll() {
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
   const [expiresInHours, setExpiresInHours] = useState(24);
+  const [visibility, setVisibility] = useState<'public' | 'private'>('private');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -107,7 +157,8 @@ function CreatePoll() {
         body: JSON.stringify({
           question: question.trim(),
           options: validOptions,
-          expiresInHours
+          expiresInHours,
+          visibility: visibility
         })
       });
 
@@ -207,6 +258,34 @@ function CreatePoll() {
           </select>
         </div>
 
+        <div className="form-group">
+          <label>Visibility</label>
+          <div className="visibility-toggle">
+            <label className="visibility-option">
+              <input
+                type="radio"
+                name="visibility"
+                value="private"
+                checked={visibility === 'private'}
+                onChange={(e) => setVisibility(e.target.value as 'private')}
+              />
+              <span>Private (Unlisted)</span>
+              <small>Only people with the link can access</small>
+            </label>
+            <label className="visibility-option">
+              <input
+                type="radio"
+                name="visibility"
+                value="public"
+                checked={visibility === 'public'}
+                onChange={(e) => setVisibility(e.target.value as 'public')}
+              />
+              <span>Public (Discoverable)</span>
+              <small>Appears in public polls listing</small>
+            </label>
+          </div>
+        </div>
+
         {error && <div className="error">{error}</div>}
 
         <button
@@ -229,10 +308,16 @@ function PollVote() {
   const [selectedOption, setSelectedOption] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [hasVoted, setHasVoted] = useState(false);
 
   useEffect(() => {
     if (pollId) {
       loadPoll(pollId);
+      // Check if user has already voted
+      const votedPolls = JSON.parse(localStorage.getItem('votedPolls') || '[]');
+      if (votedPolls.includes(pollId)) {
+        setHasVoted(true);
+      }
     }
   }, [pollId]);
 
@@ -261,17 +346,27 @@ function PollVote() {
       return;
     }
 
+    if (hasVoted) {
+      setError('You have already voted on this poll');
+      return;
+    }
+
     setLoading(true);
     setError('');
     try {
       const response = await fetch(`${API_URL}/polls/${currentPoll?.pollId}/vote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ optionId: selectedOption })
+        body: JSON.stringify({ selectedOptions: [selectedOption] })
       });
 
       if (response.ok) {
         await response.json();
+        // Mark poll as voted in localStorage
+        const votedPolls = JSON.parse(localStorage.getItem('votedPolls') || '[]');
+        votedPolls.push(pollId);
+        localStorage.setItem('votedPolls', JSON.stringify(votedPolls));
+        setHasVoted(true);
         // Navigate to results page
         navigate(`/p/${pollId}/results`);
       } else {
@@ -317,15 +412,22 @@ function PollVote() {
 
         <h1>{currentPoll.title}</h1>
 
+        {hasVoted && (
+          <div className="info-message">
+            You've already voted on this poll. <button className="link-button" onClick={() => navigate(`/p/${pollId}/results`)}>View results</button>
+          </div>
+        )}
+
         <div className="options-list">
           {currentPoll.options?.map((option, index) => (
-            <label key={index} className="option-card">
+            <label key={index} className={`option-card ${hasVoted ? 'disabled' : ''}`}>
               <input
                 type="radio"
                 name="poll-option"
                 value={option.id}
                 checked={selectedOption === option.id}
                 onChange={(e) => setSelectedOption(e.target.value)}
+                disabled={hasVoted}
               />
               <span>{option.text}</span>
             </label>
@@ -334,13 +436,15 @@ function PollVote() {
 
         {error && <div className="error">{error}</div>}
 
-        <button
-          className="btn btn-primary"
-          onClick={submitVote}
-          disabled={loading || !selectedOption}
-        >
-          {loading ? 'Submitting...' : 'Submit Vote'}
-        </button>
+        {!hasVoted && (
+          <button
+            className="btn btn-primary"
+            onClick={submitVote}
+            disabled={loading || !selectedOption}
+          >
+            {loading ? 'Submitting...' : 'Submit Vote'}
+          </button>
+        )}
 
         <button
           className="btn btn-secondary"
@@ -359,7 +463,6 @@ function PollResults() {
   const { pollId } = useParams<{ pollId: string }>();
   const navigate = useNavigate();
   const [currentPoll, setCurrentPoll] = useState<Poll | null>(null);
-  const [shareLink, setShareLink] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -388,10 +491,6 @@ function PollResults() {
     }
   };
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(shareLink);
-    alert('Link copied to clipboard!');
-  };
 
   const getPercentage = (votes: number, total: number) => {
     if (total === 0) return 0;
@@ -431,18 +530,6 @@ function PollResults() {
         <h1>{currentPoll.title}</h1>
         <p className="total-votes">{currentPoll.totalVotes} total votes</p>
 
-        {shareLink && (
-          <div className="share-section">
-            <p>Share this poll:</p>
-            <div className="share-link">
-              <input type="text" value={shareLink} readOnly />
-              <button className="btn btn-secondary" onClick={copyToClipboard}>
-                Copy
-              </button>
-            </div>
-          </div>
-        )}
-
         <div className="results-list">
           {currentPoll.options?.map((option, index) => {
             const voteCount = option.votes;
@@ -478,53 +565,90 @@ function PollResults() {
   );
 }
 
-// Footer Component
-function Footer() {
-  const products = [
-    { name: 'SnapIT Software', url: 'https://snapitsoftware.com' },
-    { name: 'SnapIT Analytics', url: 'https://snapitanalytics.com' },
-    { name: 'PDF Tools', url: 'https://pdf.snapitsoftware.com' },
-    { name: 'Chimera', url: 'https://chimera.snapitsoftware.com' },
-    { name: 'Burn', url: 'https://burn.snapitsoftware.com' },
-    { name: 'API', url: 'https://api.snapitsoftware.com' },
-    { name: 'SnapIT Agent', url: 'https://snapitagent.com' },
-    { name: 'SnapIT QR', url: 'https://snapitqr.com' },
-    { name: 'SnapIT URL', url: 'https://snapiturl.com' },
-    { name: 'Status Code Check', url: 'https://statuscodecheck.com' },
-    { name: 'SnapIT Soft', url: 'https://snapitsoft.com' },
-    { name: 'Polls', url: 'https://polls.snapitsoftware.com' },
-    { name: 'Forum', url: 'https://forum.snapitsoftware.com' },
-    { name: 'Forum Builder', url: 'https://forums.snapitsoftware.com' }
-  ];
+// Discover Public Polls Component
+function DiscoverPolls() {
+  const navigate = useNavigate();
+  const [publicPolls, setPublicPolls] = useState<Poll[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    loadPublicPolls();
+  }, []);
+
+  const loadPublicPolls = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`${API_URL}/polls?visibility=public&limit=100`);
+      if (response.ok) {
+        const data = await response.json();
+        // Sort by totalVotes descending
+        const sortedPolls = (data.polls || []).sort((a: Poll, b: Poll) => b.totalVotes - a.totalVotes);
+        setPublicPolls(sortedPolls);
+      } else {
+        setError('Failed to load public polls');
+      }
+    } catch (err) {
+      setError('Failed to load public polls');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <footer className="footer">
-      <div className="footer-content">
-        <div className="footer-links">
-          {products.map((product, index) => (
-            <a key={index} href={product.url} target="_blank" rel="noopener noreferrer">
-              {product.name}
-            </a>
+    <div className="App">
+      <div className="container discover-container">
+        <button className="btn-back" onClick={() => navigate('/')}>← Back</button>
+
+        <h1>Discover Public Polls</h1>
+        <p className="subtitle">Top 100 most popular polls</p>
+
+        {loading && <p>Loading polls...</p>}
+        {error && <div className="error">{error}</div>}
+
+        {!loading && publicPolls.length === 0 && (
+          <p className="no-polls">No public polls yet. Be the first to create one!</p>
+        )}
+
+        <div className="polls-list">
+          {publicPolls.map((poll, index) => (
+            <div
+              key={poll.pollId}
+              className="poll-card"
+              onClick={() => navigate(`/p/${poll.pollId}`)}
+            >
+              <div className="poll-rank">#{index + 1}</div>
+              <div className="poll-info">
+                <h3>{poll.title}</h3>
+                <div className="poll-stats">
+                  <span>{poll.totalVotes} votes</span>
+                  <span>•</span>
+                  <span>{poll.options.length} options</span>
+                </div>
+              </div>
+            </div>
           ))}
         </div>
-        <span className="footer-text">© 2025 SnapIT Software. All rights reserved.</span>
       </div>
-    </footer>
+    </div>
   );
 }
 
 // Main App Component with Routes
 function App() {
   return (
-    <>
+    <div className="app-root">
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/create" element={<CreatePoll />} />
+        <Route path="/discover" element={<DiscoverPolls />} />
         <Route path="/p/:pollId" element={<PollVote />} />
         <Route path="/p/:pollId/results" element={<PollResults />} />
       </Routes>
       <Footer />
-    </>
+    </div>
   );
 }
 
