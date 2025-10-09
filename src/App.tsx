@@ -313,7 +313,7 @@ function PollVote() {
   useEffect(() => {
     if (pollId) {
       loadPoll(pollId);
-      // Check if user has already voted
+      // Check localStorage first (client-side check)
       const votedPolls = JSON.parse(localStorage.getItem('votedPolls') || '[]');
       if (votedPolls.includes(pollId)) {
         setHasVoted(true);
@@ -328,7 +328,19 @@ function PollVote() {
       const response = await fetch(`${API_URL}/polls/${id}`);
       if (response.ok) {
         const data = await response.json();
-        setCurrentPoll(data.poll || data);
+        const poll = data.poll || data;
+        setCurrentPoll(poll);
+
+        // Check server-side hasVoted status (more reliable than localStorage)
+        if (poll.hasVoted) {
+          setHasVoted(true);
+          // Sync with localStorage
+          const votedPolls = JSON.parse(localStorage.getItem('votedPolls') || '[]');
+          if (!votedPolls.includes(id)) {
+            votedPolls.push(id);
+            localStorage.setItem('votedPolls', JSON.stringify(votedPolls));
+          }
+        }
       } else {
         setError('Poll not found');
       }
@@ -370,7 +382,21 @@ function PollVote() {
         // Navigate to results page
         navigate(`/p/${pollId}/results`);
       } else {
-        setError('Failed to submit vote');
+        // Try to get error message from API response
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || 'Failed to submit vote';
+
+        // If already voted, mark in localStorage to prevent future attempts
+        if (errorMessage.includes('already voted')) {
+          const votedPolls = JSON.parse(localStorage.getItem('votedPolls') || '[]');
+          if (!votedPolls.includes(pollId)) {
+            votedPolls.push(pollId);
+            localStorage.setItem('votedPolls', JSON.stringify(votedPolls));
+          }
+          setHasVoted(true);
+        }
+
+        setError(errorMessage);
       }
     } catch (err) {
       setError('Failed to submit vote');
