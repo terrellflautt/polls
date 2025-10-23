@@ -1,0 +1,29 @@
+{
+  "name": "snapit-polls-api",
+  "version": "1.0.0",
+  "description": "SnapIT Polls - Anonymous polling service",
+  "main": "index.js",
+  "scripts": {
+    "deploy": "serverless deploy",
+    "deploy:prod": "serverless deploy --stage prod",
+    "local": "serverless offline"
+  },
+  "keywords": [
+    "polls",
+    "surveys",
+    "serverless"
+  ],
+  "author": "SnapIT Software",
+  "license": "ISC",
+  "devDependencies": {
+    "serverless": "^3.38.0",
+    "serverless-offline": "^13.3.3"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.1691.0",
+    "google-auth-library": "^10.4.1",
+    "jsonwebtoken": "^9.0.2",
+    "stripe": "^19.1.0",
+    "uuid": "^11.0.3"
+  }
+}

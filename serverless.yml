@@ -1,0 +1,388 @@
+service: snapit-polls-api
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: ${opt:stage, 'prod'}
+
+  # API Gateway configuration
+  apiGateway:
+    metrics: true
+    shouldStartNameWithService: true
+
+  environment:
+    POLLS_TABLE: ${self:service}-polls-${self:provider.stage}
+    VOTES_TABLE: ${self:service}-votes-${self:provider.stage}
+    USERS_TABLE: snapit-forum-api-users-${self:provider.stage}  # Shared with forum
+    STRIPE_SECRET_KEY: ${ssm:/snapit-forum/prod/STRIPE_SECRET_KEY}
+    STRIPE_PRO_PRICE_ID: ${ssm:/snapit-forum/prod/STRIPE_PRO_PRICE_ID}
+    STRIPE_WEBHOOK_SECRET: ${ssm:/snapit-forum/prod/STRIPE_WEBHOOK_SECRET}
+    JWT_SECRET: ${ssm:/snapit-forum/prod/JWT_SECRET}
+
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.POLLS_TABLE}"
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.POLLS_TABLE}/index/*"
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.VOTES_TABLE}"
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.VOTES_TABLE}/index/*"
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.USERS_TABLE}"
+            - "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.USERS_TABLE}/index/*"
+        - Effect: Allow
+          Action:
+            - ssm:GetParameter
+            - ssm:GetParameters
+          Resource:
+            - "arn:aws:ssm:${self:provider.region}:*:parameter/snapit-forum/prod/*"
+        - Effect: Allow
+          Action:
+            - ses:SendEmail
+            - ses:SendRawEmail
+          Resource: "*"
+
+package:
+  patterns:
+    - '!polls-app/**'
+    - '!.git/**'
+
+functions:
+  # Shared authorizer with forum
+  authorizer:
+    handler: src/handlers/auth.authorizer
+
+  # Google OAuth
+  googleAuth:
+    handler: src/handlers/auth.googleAuth
+    events:
+      - http:
+          path: auth/google
+          method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+            allowCredentials: false
+            methods:
+              - OPTIONS
+              - POST
+
+  # Poll management
+  createPoll:
+    handler: src/handlers/polls.create
+    events:
+      - http:
+          path: polls
+          method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+            allowCredentials: false
+            methods:
+              - OPTIONS
+              - POST
+          # Removed authorizer - allow anonymous poll creation for free tier
+
+  getPoll:
+    handler: src/handlers/polls.get
+    events:
+      - http:
+          path: polls/{pollId}
+          method: get
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+            allowCredentials: false
+            methods:
+              - OPTIONS
+              - GET
+          # Public endpoint - anyone can view poll results
+
+  listPolls:
+    handler: src/handlers/polls.list
+    events:
+      - http:
+          path: polls
+          method: get
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+            allowCredentials: false
+            methods:
+              - OPTIONS
+              - GET
+          # No authorizer - allows both public and authenticated requests
+
+  updatePoll:
+    handler: src/handlers/polls.update
+    events:
+      - http:
+          path: polls/{pollId}
+          method: patch
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+            allowCredentials: false
+            methods:
+              - OPTIONS
+              - PATCH
+          # Public endpoint - no auth required
+
+  deletePoll:
+    handler: src/handlers/polls.delete
+    events:
+      - http:
+          path: polls/{pollId}
+          method: delete
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+            allowCredentials: false
+            methods:
+              - OPTIONS
+              - DELETE
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+
+  # Voting
+  vote:
+    handler: src/handlers/votes.cast
+    events:
+      - http:
+          path: polls/{pollId}/vote
+          method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+            allowCredentials: false
+            methods:
+              - OPTIONS
+              - POST
+          # Removed authorizer - allow anonymous voting
+
+  getResults:
+    handler: src/handlers/votes.results
+    events:
+      - http:
+          path: polls/{pollId}/results
+          method: get
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+            allowCredentials: false
+            methods:
+              - OPTIONS
+              - GET
+          # Public endpoint - anyone can view results
+
+  # Billing & Subscriptions
+  createCheckoutSession:
+    handler: src/handlers/billing.createCheckoutSession
+    events:
+      - http:
+          path: billing/create-checkout-session
+          method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+            allowCredentials: false
+            methods:
+              - OPTIONS
+              - POST
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+
+  getSubscription:
+    handler: src/handlers/billing.getSubscription
+    events:
+      - http:
+          path: billing/subscription
+          method: get
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+            allowCredentials: false
+            methods:
+              - OPTIONS
+              - GET
+          authorizer:
+            name: authorizer
+            resultTtlInSeconds: 0
+
+  stripeWebhook:
+    handler: src/handlers/billing.webhook
+    events:
+      - http:
+          path: billing/webhook
+          method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - stripe-signature
+            allowCredentials: false
+            methods:
+              - OPTIONS
+              - POST
+          # No authorizer - Stripe webhook calls this
+
+resources:
+  Resources:
+    PollsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.POLLS_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: pollId
+            AttributeType: S
+          - AttributeName: creatorUserId
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: N
+        KeySchema:
+          - AttributeName: pollId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: CreatorIndex
+            KeySchema:
+              - AttributeName: creatorUserId
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+        TimeToLiveSpecification:
+          AttributeName: expiresAt
+          Enabled: true
+
+    VotesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.VOTES_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: voteId
+            AttributeType: S
+          - AttributeName: pollId
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: voteId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: PollIndex
+            KeySchema:
+              - AttributeName: pollId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+          - IndexName: UserPollIndex
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+              - AttributeName: pollId
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+    # API Gateway Usage Plan (enterprise-grade rate limiting)
+    ApiGatewayUsagePlan:
+      Type: AWS::ApiGateway::UsagePlan
+      DependsOn: ApiGatewayRestApi
+      Properties:
+        UsagePlanName: snapit-polls-${self:provider.stage}
+        Description: Usage plan for SnapIT Polls API
+        Throttle:
+          BurstLimit: 500
+          RateLimit: 200
+        Quota:
+          Limit: 2000000
+          Period: MONTH
+        ApiStages:
+          - ApiId:
+              Ref: ApiGatewayRestApi
+            Stage: ${self:provider.stage}
+
+    # API Key for monitoring and advanced usage tracking
+    ApiGatewayApiKey:
+      Type: AWS::ApiGateway::ApiKey
+      Properties:
+        Name: snapit-polls-api-key-${self:provider.stage}
+        Description: API key for SnapIT Polls
+        Enabled: true
+
+    # Link API Key to Usage Plan
+    ApiGatewayUsagePlanKey:
+      Type: AWS::ApiGateway::UsagePlanKey
+      Properties:
+        KeyId:
+          Ref: ApiGatewayApiKey
+        KeyType: API_KEY
+        UsagePlanId:
+          Ref: ApiGatewayUsagePlan
