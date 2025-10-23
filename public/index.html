@@ -31,6 +31,18 @@
     <meta name="robots" content="index, follow" />
     <meta name="language" content="English" />
     <meta name="revisit-after" content="7 days" />
+
+    <!-- Cross-Origin-Opener-Policy removed for Google OAuth compatibility -->
+
+    <!-- CSP for Google OAuth -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; style-src 'self' 'unsafe-inline' https: data:; connect-src 'self' https: wss: data:; font-src 'self' https: data:; img-src 'self' https: data: blob:; frame-src 'self' https:; media-src 'self' https: data: blob:; object-src 'none'; base-uri 'self';">
+
+    <!-- Preconnects -->
+    <link rel="preconnect" href="https://accounts.google.com">
+    <link rel="preconnect" href="https://polls-api.snapitsoftware.com">
+    <link rel="preconnect" href="https://api.snapiturl.com">
+    <link rel="preconnect" href="https://api.snapitqr.com">
+
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <!--
       manifest.json provides metadata used when your web app is installed on a
@@ -47,6 +59,15 @@
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
     <title>SnapIT Polls - Create and Share Polls Instantly</title>
+
+    <!-- Configuration (must be loaded first) -->
+    <script src="%PUBLIC_URL%/config.js"></script>
+
+    <!-- Google OAuth -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+    <!-- Stripe for payment processing -->
+    <script src="https://js.stripe.com/v3/"></script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
